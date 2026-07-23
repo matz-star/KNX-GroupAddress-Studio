@@ -109,7 +109,7 @@ const downloadTextFileNoBom = (filename: string, content: string) => {
   URL.revokeObjectURL(url);
 };
 
-// Keep this for compatibility if other code imports it.
+// Backward compatibility
 export const downloadGroupAddressesCsv = (
   addresses: GroupAddress[],
   projectName: string
@@ -118,9 +118,8 @@ export const downloadGroupAddressesCsv = (
 };
 
 /**
- * ETS6 expected output (CSV-only import):
+ * ETS6 3-column CSV:
  * "0/0/1","Name","1.001"
- * "0/0/2","Name 2","1.001"
  */
 export const downloadGroupAddressesEtsCsv = (
   addresses: GroupAddress[],
@@ -129,19 +128,56 @@ export const downloadGroupAddressesEtsCsv = (
   const q = (v: string) => `"${String(v ?? '').replace(/"/g, '""')}"`;
 
   const lines: string[] = [];
-
   for (const a of addresses) {
     const address = (a.address ?? '').trim();
     const name = (a.name ?? '').trim();
     const dpt = (a.dpt ?? '').trim();
 
     if (!address || !name || !dpt) continue;
-
-    // strict 3-column row
     lines.push([q(address), q(name), q(dpt)].join(','));
   }
 
   const csv = lines.join('\r\n');
   const date = new Date().toISOString().slice(0, 10);
-  downloadTextFileNoBom(`${escapeFilenamePart(projectName)}_${date}_ETS6.csv`, csv);
+  downloadTextFileNoBom(`${escapeFilenamePart(projectName)}_${date}_ETS6_3col.csv`, csv);
+};
+
+/**
+ * ETS6 tree-style CSV (9 columns), matching files like:
+ * "labb","","","0/-/-","","","","","Auto"
+ * "","100 Lampa, TF","","0/0/-","","","","","Auto"
+ */
+export const downloadGroupAddressesEtsTreeCsv = (
+  addresses: GroupAddress[],
+  projectName: string
+) => {
+  const q = (v: string) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+
+  const toTreeAddress = (ga: string) => {
+    const [main = '', middle = ''] = String(ga).split('/');
+    return `${main}/${middle}/-`;
+  };
+
+  const lines: string[] = [];
+
+  // Root row
+  lines.push(
+    [q(projectName), q(''), q(''), q('0/-/-'), q(''), q(''), q(''), q(''), q('Auto')].join(',')
+  );
+
+  // Child rows
+  for (const a of addresses) {
+    const address = (a.address ?? '').trim();
+    const name = (a.name ?? '').trim();
+
+    if (!address || !name) continue;
+
+    lines.push(
+      [q(''), q(name), q(''), q(toTreeAddress(address)), q(''), q(''), q(''), q(''), q('Auto')].join(',')
+    );
+  }
+
+  const csv = lines.join('\r\n');
+  const date = new Date().toISOString().slice(0, 10);
+  downloadTextFileNoBom(`${escapeFilenamePart(projectName)}_${date}_ETS6_tree.csv`, csv);
 };

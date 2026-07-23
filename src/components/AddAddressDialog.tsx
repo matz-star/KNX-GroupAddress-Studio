@@ -24,9 +24,33 @@ type AddAddressDialogProps = {
 };
 
 const COMMON_DPT_CODES = new Set([
-  '1.001', '1.002', '3.007', '3.008', '5.001', '5.003', '6.001', '7.001', '8.001',
-  '9.001', '9.004', '9.005', '9.006', '9.007', '10.001', '11.001', '12.001', '13.001',
-  '14.019', '14.027', '14.056', '16.001', '17.001', '18.001', '19.001', '20.102', '232.600',
+  '1.001',
+  '1.002',
+  '3.007',
+  '3.008',
+  '5.001',
+  '5.003',
+  '6.001',
+  '7.001',
+  '8.001',
+  '9.001',
+  '9.004',
+  '9.005',
+  '9.006',
+  '9.007',
+  '10.001',
+  '11.001',
+  '12.001',
+  '13.001',
+  '14.019',
+  '14.027',
+  '14.056',
+  '16.001',
+  '17.001',
+  '18.001',
+  '19.001',
+  '20.102',
+  '232.600',
 ]);
 
 const ALL_DPT_OPTIONS: DPTType[] = KNX_DPT_OPTIONS.map((option) => ({
@@ -46,11 +70,29 @@ const emptyFormValue: AddressFormValue = {
   comment: '',
 };
 
-const GROUP_ADDRESS_PATTERN = /^\d+\/\d+\/\d+$/;
+// Strict KNX 3-level limits: main 0-15, middle 0-15, sub 0-255
+const GROUP_ADDRESS_PATTERN =
+  /^(?:[0-9]|1[0-5])\/(?:[0-9]|1[0-5])\/(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$/;
 
 const dptFamily = (code: string): string => {
   const main = code.split('.')[0];
   return `DPT ${main}`;
+};
+
+const normalizeGroupAddressInput = (raw: string): string => {
+  // keep only digits; separators typed by user (space, -, /, .) are ignored
+  const digits = raw.replace(/[^\d]/g, '');
+
+  if (!digits) return '';
+
+  // Heuristic: first digit = main, second = middle, rest = sub
+  const main = digits.slice(0, 1);
+  const middle = digits.slice(1, 2);
+  const sub = digits.slice(2, 5); // cap sub to 3 digits
+
+  if (digits.length <= 1) return main;
+  if (digits.length === 2) return `${main}/${middle}`;
+  return `${main}/${middle}/${sub}`;
 };
 
 const AddAddressDialog = ({
@@ -100,7 +142,7 @@ const AddAddressDialog = ({
         !value.address.trim()
           ? 'Address is required.'
           : !GROUP_ADDRESS_PATTERN.test(value.address.trim())
-            ? 'Use KNX format X/Y/Z.'
+            ? 'Use KNX format X/Y/Z (0-15/0-15/0-255).'
             : '',
       name: value.name.trim() ? '' : 'Name is required.',
       dpt: /^\d+\.\d{3}$/.test(value.dpt.trim()) ? '' : 'Use DPT format X.XXX.',
@@ -110,17 +152,36 @@ const AddAddressDialog = ({
 
   const hasErrors = Boolean(errors.address || errors.name || errors.dpt);
 
-  const handleSave = () => {
+  const payloadFromValue = (): AddressFormValue => ({
+    address: value.address.trim(),
+    name: value.name.trim(),
+    description: value.description.trim(),
+    dpt: value.dpt.trim(),
+    comment: value.comment.trim(),
+  });
+
+  const resetForNext = () => {
+    setValue((current) => ({
+      ...emptyFormValue,
+      dpt: current.dpt || emptyFormValue.dpt, // keep selected DPT for faster bulk entry
+    }));
+    setSubmitted(false);
+  };
+
+  const handleAddAndNext = () => {
     setSubmitted(true);
     if (hasErrors) return;
 
-    onSave({
-      address: value.address.trim(),
-      name: value.name.trim(),
-      description: value.description.trim(),
-      dpt: value.dpt.trim(),
-      comment: value.comment.trim(),
-    });
+    onSave(payloadFromValue());
+    resetForNext();
+  };
+
+  const handleSaveAndClose = () => {
+    setSubmitted(true);
+    if (hasErrors) return;
+
+    onSave(payloadFromValue());
+    onClose();
   };
 
   return (
@@ -137,11 +198,14 @@ const AddAddressDialog = ({
               label="Address"
               value={value.address}
               onChange={(event) =>
-                setValue((current) => ({ ...current, address: event.target.value }))
+                setValue((current) => ({
+                  ...current,
+                  address: normalizeGroupAddressInput(event.target.value),
+                }))
               }
               error={submitted && Boolean(errors.address)}
               helperText={submitted ? errors.address : ' '}
-              placeholder="1/0/1"
+              placeholder="1/0/10"
             />
           </Grid>
 
@@ -217,10 +281,15 @@ const AddAddressDialog = ({
         </Grid>
       </DialogContent>
 
-      <DialogActions sx={{ px: 3, pb: 3 }}>
+      <DialogActions sx={{ px: 3, pb: 3, gap: 1 }}>
         <Button onClick={onClose}>Cancel</Button>
-        <Button onClick={handleSave} variant="contained">
-          {initialValue ? 'Save changes' : 'Add address'}
+        {!initialValue && (
+          <Button onClick={handleAddAndNext} variant="outlined">
+            Add & next
+          </Button>
+        )}
+        <Button onClick={handleSaveAndClose} variant="contained">
+          {initialValue ? 'Save changes' : 'Add & close'}
         </Button>
       </DialogActions>
     </Dialog>

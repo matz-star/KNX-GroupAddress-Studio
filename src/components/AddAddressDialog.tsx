@@ -5,11 +5,14 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControlLabel,
   Grid,
   MenuItem,
+  Switch,
   TextField,
 } from '@mui/material';
 import { DPTType, GroupAddress } from '../types/GroupAddress';
+import { KNX_DPT_OPTIONS } from '../knx/dptRegistry';
 
 type AddressFormValue = Omit<GroupAddress, 'id'>;
 
@@ -20,14 +23,44 @@ type AddAddressDialogProps = {
   onSave: (value: AddressFormValue) => void;
 };
 
-const dptOptions: DPTType[] = [
-  { code: '1.001', label: '1.001 - Switch' },
-  { code: '1.002', label: '1.002 - Boolean' },
-  { code: '5.001', label: '5.001 - Percentage' },
-  { code: '9.001', label: '9.001 - Temperature' },
-  { code: '12.001', label: '12.001 - Unsigned count' },
-  { code: '16.001', label: '16.001 - Text' },
-];
+const COMMON_DPT_CODES = new Set([
+  '1.001',
+  '1.002',
+  '3.007',
+  '3.008',
+  '5.001',
+  '5.003',
+  '6.001',
+  '7.001',
+  '8.001',
+  '9.001',
+  '9.004',
+  '9.005',
+  '9.006',
+  '9.007',
+  '10.001',
+  '11.001',
+  '12.001',
+  '13.001',
+  '14.019',
+  '14.027',
+  '14.056',
+  '16.001',
+  '17.001',
+  '18.001',
+  '19.001',
+  '20.102',
+  '232.600',
+]);
+
+const ALL_DPT_OPTIONS: DPTType[] = KNX_DPT_OPTIONS.map((option) => ({
+  code: option.value,
+  label: option.label,
+}));
+
+const COMMON_DPT_OPTIONS: DPTType[] = ALL_DPT_OPTIONS.filter((option) =>
+  COMMON_DPT_CODES.has(option.code)
+);
 
 const emptyFormValue: AddressFormValue = {
   address: '',
@@ -47,6 +80,7 @@ const AddAddressDialog = ({
 }: AddAddressDialogProps) => {
   const [value, setValue] = useState<AddressFormValue>(emptyFormValue);
   const [submitted, setSubmitted] = useState(false);
+  const [showAllDpts, setShowAllDpts] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -62,8 +96,14 @@ const AddAddressDialog = ({
           : emptyFormValue
       );
       setSubmitted(false);
+      setShowAllDpts(false);
     }
   }, [initialValue, open]);
+
+  const visibleDptOptions = useMemo(
+    () => (showAllDpts ? ALL_DPT_OPTIONS : COMMON_DPT_OPTIONS),
+    [showAllDpts]
+  );
 
   const errors = useMemo(
     () => ({
@@ -141,6 +181,19 @@ const AddAddressDialog = ({
               }
             />
           </Grid>
+
+          <Grid item xs={12}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={showAllDpts}
+                  onChange={(_, checked) => setShowAllDpts(checked)}
+                />
+              }
+              label={showAllDpts ? 'Showing all DPTs' : 'Showing common DPTs'}
+            />
+          </Grid>
+
           <Grid item xs={12} sm={6}>
             <TextField
               fullWidth
@@ -154,13 +207,14 @@ const AddAddressDialog = ({
               error={submitted && Boolean(errors.dpt)}
               helperText={submitted ? errors.dpt : ' '}
             >
-              {dptOptions.map((option) => (
+              {visibleDptOptions.map((option) => (
                 <MenuItem key={option.code} value={option.code}>
                   {option.label}
                 </MenuItem>
               ))}
             </TextField>
           </Grid>
+
           <Grid item xs={12} sm={6}>
             <TextField
               fullWidth

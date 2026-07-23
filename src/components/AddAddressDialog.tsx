@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  Autocomplete,
   Button,
   Dialog,
   DialogActions,
@@ -7,7 +8,6 @@ import {
   DialogTitle,
   FormControlLabel,
   Grid,
-  MenuItem,
   Switch,
   TextField,
 } from '@mui/material';
@@ -24,33 +24,9 @@ type AddAddressDialogProps = {
 };
 
 const COMMON_DPT_CODES = new Set([
-  '1.001',
-  '1.002',
-  '3.007',
-  '3.008',
-  '5.001',
-  '5.003',
-  '6.001',
-  '7.001',
-  '8.001',
-  '9.001',
-  '9.004',
-  '9.005',
-  '9.006',
-  '9.007',
-  '10.001',
-  '11.001',
-  '12.001',
-  '13.001',
-  '14.019',
-  '14.027',
-  '14.056',
-  '16.001',
-  '17.001',
-  '18.001',
-  '19.001',
-  '20.102',
-  '232.600',
+  '1.001', '1.002', '3.007', '3.008', '5.001', '5.003', '6.001', '7.001', '8.001',
+  '9.001', '9.004', '9.005', '9.006', '9.007', '10.001', '11.001', '12.001', '13.001',
+  '14.019', '14.027', '14.056', '16.001', '17.001', '18.001', '19.001', '20.102', '232.600',
 ]);
 
 const ALL_DPT_OPTIONS: DPTType[] = KNX_DPT_OPTIONS.map((option) => ({
@@ -71,6 +47,11 @@ const emptyFormValue: AddressFormValue = {
 };
 
 const GROUP_ADDRESS_PATTERN = /^\d+\/\d+\/\d+$/;
+
+const dptFamily = (code: string): string => {
+  const main = code.split('.')[0];
+  return `DPT ${main}`;
+};
 
 const AddAddressDialog = ({
   open,
@@ -105,6 +86,14 @@ const AddAddressDialog = ({
     [showAllDpts]
   );
 
+  const selectedDptOption = useMemo(
+    () =>
+      visibleDptOptions.find((option) => option.code === value.dpt) ??
+      ALL_DPT_OPTIONS.find((option) => option.code === value.dpt) ??
+      null,
+    [value.dpt, visibleDptOptions]
+  );
+
   const errors = useMemo(
     () => ({
       address:
@@ -123,10 +112,7 @@ const AddAddressDialog = ({
 
   const handleSave = () => {
     setSubmitted(true);
-
-    if (hasErrors) {
-      return;
-    }
+    if (hasErrors) return;
 
     onSave({
       address: value.address.trim(),
@@ -158,6 +144,7 @@ const AddAddressDialog = ({
               placeholder="1/0/1"
             />
           </Grid>
+
           <Grid item xs={12} sm={6}>
             <TextField
               fullWidth
@@ -171,6 +158,7 @@ const AddAddressDialog = ({
               helperText={submitted ? errors.name : ' '}
             />
           </Grid>
+
           <Grid item xs={12}>
             <TextField
               fullWidth
@@ -195,24 +183,25 @@ const AddAddressDialog = ({
           </Grid>
 
           <Grid item xs={12} sm={6}>
-            <TextField
-              fullWidth
-              required
-              select
-              label="Data point type"
-              value={value.dpt}
-              onChange={(event) =>
-                setValue((current) => ({ ...current, dpt: event.target.value }))
+            <Autocomplete<DPTType, false, false, false>
+              options={visibleDptOptions}
+              value={selectedDptOption}
+              onChange={(_, option) =>
+                setValue((current) => ({ ...current, dpt: option?.code ?? '' }))
               }
-              error={submitted && Boolean(errors.dpt)}
-              helperText={submitted ? errors.dpt : ' '}
-            >
-              {visibleDptOptions.map((option) => (
-                <MenuItem key={option.code} value={option.code}>
-                  {option.label}
-                </MenuItem>
-              ))}
-            </TextField>
+              getOptionLabel={(option) => option.label}
+              isOptionEqualToValue={(option, selected) => option.code === selected.code}
+              groupBy={(option) => dptFamily(option.code)}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  required
+                  label="Data point type"
+                  error={submitted && Boolean(errors.dpt)}
+                  helperText={submitted ? errors.dpt : ' '}
+                />
+              )}
+            />
           </Grid>
 
           <Grid item xs={12} sm={6}>
@@ -227,6 +216,7 @@ const AddAddressDialog = ({
           </Grid>
         </Grid>
       </DialogContent>
+
       <DialogActions sx={{ px: 3, pb: 3 }}>
         <Button onClick={onClose}>Cancel</Button>
         <Button onClick={handleSave} variant="contained">

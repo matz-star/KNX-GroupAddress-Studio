@@ -1,6 +1,9 @@
 import { Button, Stack } from '@mui/material';
 import { GroupAddress } from '../types/GroupAddress';
-import { downloadGroupAddressesEtsCsv } from '../utils/csvHandler';
+import {
+  downloadGroupAddressesEtsCsv,
+  downloadGroupAddressesEtsTreeCsv,
+} from '../utils/csvHandler';
 
 type GroupAddressesToolbarProps = {
   addresses: GroupAddress[];
@@ -17,7 +20,14 @@ const GroupAddressesToolbar = ({
         variant="contained"
         onClick={() => downloadGroupAddressesEtsCsv(addresses, projectName)}
       >
-        Export CSV
+        Export CSV (ETS6 3-col)
+      </Button>
+
+      <Button
+        variant="outlined"
+        onClick={() => downloadGroupAddressesEtsTreeCsv(addresses, projectName)}
+      >
+        Export CSV (ETS6 Tree)
       </Button>
     </Stack>
   );

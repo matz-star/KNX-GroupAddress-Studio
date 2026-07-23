@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Autocomplete,
+  Box,
   Button,
   Dialog,
   DialogActions,
@@ -8,8 +9,10 @@ import {
   DialogTitle,
   FormControlLabel,
   Grid,
+  Stack,
   Switch,
   TextField,
+  Typography,
 } from '@mui/material';
 import { DPTType, GroupAddress } from '../types/GroupAddress';
 import { KNX_DPT_OPTIONS } from '../knx/dptRegistry';
@@ -62,6 +65,39 @@ const COMMON_DPT_OPTIONS: DPTType[] = ALL_DPT_OPTIONS.filter((option) =>
   COMMON_DPT_CODES.has(option.code)
 );
 
+const NAME_SUFFIXES = [
+  'Till/Från',
+  'Till/Från Status',
+  'Dim',
+  'Ljusvärde',
+  'Ljusv.Status',
+  'Ärvärde',
+  'Börvärde',
+  'Ändra börvärde',
+  'Styr',
+] as const;
+
+const DIMMER_SUFFIXES = [
+  { suffix: 'Till/Från', dpt: '1.001', offset: 0 },
+  { suffix: 'Till/Från Status', dpt: '1.002', offset: 1 },
+  { suffix: 'Dim', dpt: '3.007', offset: 2 },
+  { suffix: 'Ljusvärde', dpt: '5.001', offset: 3 },
+  { suffix: 'Ljusv.Status', dpt: '5.001', offset: 4 },
+] as const;
+
+const RTC_SUFFIXES = [
+  { suffix: 'Ärvärde', dpt: '9.001', offset: 0 },
+  { suffix: 'Börvärde', dpt: '9.001', offset: 1 },
+  { suffix: 'Ändra börvärde', dpt: '6.010', offset: 2 },
+  { suffix: 'Driftläge', dpt: '20.102', offset: 3 },
+  { suffix: 'Styr Värme', dpt: '5.001', offset: 4 },
+  { suffix: 'Status Värme', dpt: '5.001', offset: 5 },
+  { suffix: 'Styr Kyla', dpt: '5.001', offset: 6 },
+  { suffix: 'Status Kyla', dpt: '5.001', offset: 7 },
+  { suffix: 'Styr Fläkt', dpt: '5.001', offset: 8 },
+  { suffix: 'Status Fläkt', dpt: '5.001', offset: 9 },
+] as const;
+
 const emptyFormValue: AddressFormValue = {
   address: '',
   name: '',
@@ -70,7 +106,6 @@ const emptyFormValue: AddressFormValue = {
   comment: '',
 };
 
-// Strict KNX 3-level limits: main 0-15, middle 0-15, sub 0-255
 const GROUP_ADDRESS_PATTERN =
   /^(?:[0-9]|1[0-5])\/(?:[0-9]|1[0-5])\/(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$/;
 
@@ -79,20 +114,39 @@ const dptFamily = (code: string): string => {
   return `DPT ${main}`;
 };
 
-const normalizeGroupAddressInput = (raw: string): string => {
-  // keep only digits; separators typed by user (space, -, /, .) are ignored
-  const digits = raw.replace(/[^\d]/g, '');
+const splitKnxAddress = (address: string): [number, number, number] | null => {
+  const parts = address.trim().split('/');
+  if (parts.length !== 3) return null;
 
-  if (!digits) return '';
+  const main = Number(parts[0]);
+  const middle = Number(parts[1]);
+  const sub = Number(parts[2]);
 
-  // Heuristic: first digit = main, second = middle, rest = sub
-  const main = digits.slice(0, 1);
-  const middle = digits.slice(1, 2);
-  const sub = digits.slice(2, 5); // cap sub to 3 digits
+  if (
+    Number.isNaN(main) ||
+    Number.isNaN(middle) ||
+    Number.isNaN(sub) ||
+    main < 0 ||
+    main > 15 ||
+    middle < 0 ||
+    middle > 15 ||
+    sub < 0 ||
+    sub > 255
+  ) {
+    return null;
+  }
 
-  if (digits.length <= 1) return main;
-  if (digits.length === 2) return `${main}/${middle}`;
-  return `${main}/${middle}/${sub}`;
+  return [main, middle, sub];
+};
+
+const formatKnxAddress = (main: number, middle: number, sub: number): string =>
+  `${main}/${middle}/${sub}`;
+
+const addSuffixToName = (baseName: string, suffix: string): string => {
+  const trimmed = baseName.trim();
+  if (!trimmed) return suffix;
+  if (trimmed.endsWith(suffix)) return trimmed;
+  return `${trimmed}, ${suffix}`;
 };
 
 const AddAddressDialog = ({
@@ -163,7 +217,7 @@ const AddAddressDialog = ({
   const resetForNext = () => {
     setValue((current) => ({
       ...emptyFormValue,
-      dpt: current.dpt || emptyFormValue.dpt, // keep selected DPT for faster bulk entry
+      dpt: current.dpt || emptyFormValue.dpt,
     }));
     setSubmitted(false);
   };
@@ -184,8 +238,91 @@ const AddAddressDialog = ({
     onClose();
   };
 
+  const handleAddSwitch = () => {
+    setSubmitted(true);
+    if (hasErrors) return;
+
+    const parsed = splitKnxAddress(value.address.trim());
+    if (!parsed) return;
+
+    const [main, middle, sub] = parsed;
+    const baseName = value.name.trim();
+
+    const first: AddressFormValue = {
+      ...payloadFromValue(),
+      address: formatKnxAddress(main, middle, sub),
+      name: addSuffixToName(baseName, 'Till/Från'),
+      dpt: '1.001',
+    };
+    onSave(first);
+
+    if (sub < 255) {
+      const second: AddressFormValue = {
+        ...payloadFromValue(),
+        address: formatKnxAddress(main, middle, sub + 1),
+        name: addSuffixToName(baseName, 'Till/Från Status'),
+        dpt: '1.002',
+      };
+      onSave(second);
+    }
+
+    resetForNext();
+  };
+
+  const handleAddDimmer = () => {
+    setSubmitted(true);
+    if (hasErrors) return;
+
+    const parsed = splitKnxAddress(value.address.trim());
+    if (!parsed) return;
+
+    const [main, middle, sub] = parsed;
+    const baseName = value.name.trim();
+
+    // Need sub..sub+4
+    if (sub > 251) return;
+
+    for (const item of DIMMER_SUFFIXES) {
+      const entry: AddressFormValue = {
+        ...payloadFromValue(),
+        address: formatKnxAddress(main, middle, sub + item.offset),
+        name: addSuffixToName(baseName, item.suffix),
+        dpt: item.dpt,
+      };
+      onSave(entry);
+    }
+
+    resetForNext();
+  };
+
+  const handleAddRtc = () => {
+    setSubmitted(true);
+    if (hasErrors) return;
+
+    const parsed = splitKnxAddress(value.address.trim());
+    if (!parsed) return;
+
+    const [main, middle, sub] = parsed;
+    const baseName = value.name.trim();
+
+    // Need sub..sub+9
+    if (sub > 246) return;
+
+    for (const item of RTC_SUFFIXES) {
+      const entry: AddressFormValue = {
+        ...payloadFromValue(),
+        address: formatKnxAddress(main, middle, sub + item.offset),
+        name: addSuffixToName(baseName, item.suffix),
+        dpt: item.dpt,
+      };
+      onSave(entry);
+    }
+
+    resetForNext();
+  };
+
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
       <DialogTitle>
         {initialValue ? 'Edit group address' : 'Add group address'}
       </DialogTitle>
@@ -197,10 +334,22 @@ const AddAddressDialog = ({
               required
               label="Address"
               value={value.address}
+              onKeyDown={(event) => {
+                if (event.key === ' ') {
+                  event.preventDefault();
+                  setValue((current) => {
+                    const text = current.address;
+                    const slashCount = (text.match(/\//g) || []).length;
+                    if (slashCount >= 2) return current;
+                    if (text.endsWith('/')) return current;
+                    return { ...current, address: `${text}/` };
+                  });
+                }
+              }}
               onChange={(event) =>
                 setValue((current) => ({
                   ...current,
-                  address: normalizeGroupAddressInput(event.target.value),
+                  address: event.target.value,
                 }))
               }
               error={submitted && Boolean(errors.address)}
@@ -221,6 +370,29 @@ const AddAddressDialog = ({
               error={submitted && Boolean(errors.name)}
               helperText={submitted ? errors.name : ' '}
             />
+          </Grid>
+
+          <Grid item xs={12}>
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              Quick suffix buttons (auto-append to Name):
+            </Typography>
+            <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+              {NAME_SUFFIXES.map((suffix) => (
+                <Button
+                  key={suffix}
+                  size="small"
+                  variant="outlined"
+                  onClick={() =>
+                    setValue((current) => ({
+                      ...current,
+                      name: addSuffixToName(current.name, suffix),
+                    }))
+                  }
+                >
+                  {suffix}
+                </Button>
+              ))}
+            </Stack>
           </Grid>
 
           <Grid item xs={12}>
@@ -278,6 +450,22 @@ const AddAddressDialog = ({
               }
             />
           </Grid>
+
+          {!initialValue && (
+            <Grid item xs={12}>
+              <Box sx={{ pt: 1, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                <Button variant="contained" color="secondary" onClick={handleAddSwitch}>
+                  Add switch (2 group addresses)
+                </Button>
+                <Button variant="contained" color="secondary" onClick={handleAddDimmer}>
+                  Add dimmer (5 group addresses)
+                </Button>
+                <Button variant="contained" color="secondary" onClick={handleAddRtc}>
+                  Add RTC (10 group addresses)
+                </Button>
+              </Box>
+            </Grid>
+          )}
         </Grid>
       </DialogContent>
 

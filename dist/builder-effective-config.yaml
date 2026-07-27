@@ -1,0 +1,22 @@
+directories:
+  output: dist
+  buildResources: assets
+files:
+  - filter:
+      - build/**/*
+      - dist
+      - build
+      - node_modules
+extraMetadata:
+  main: build/electron.js
+appId: com.knx.groupaddressstudio
+productName: KNX Group Address Studio
+win:
+  target:
+    - nsis
+    - portable
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+extends: react-cra
+electronVersion: 25.9.8

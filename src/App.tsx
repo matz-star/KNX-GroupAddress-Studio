@@ -5,7 +5,11 @@ import ControlPanel from './components/ControlPanel';
 import GroupAddressTable from './components/GroupAddressTable';
 import Header from './components/Header';
 import { GroupAddress } from './types/GroupAddress';
-import { downloadGroupAddressesCsv, parseGroupAddressesCsv } from './utils/csvHandler';
+import {
+  downloadGroupAddressesEtsCsv,
+  downloadGroupAddressesEtsTreeCsv,
+  parseGroupAddressesCsv,
+} from './utils/csvHandler';
 import {
   loadGroupAddresses,
   loadProjectName,
@@ -180,14 +184,24 @@ const App = () => {
     }
   };
 
-  const handleExport = () => {
+  const handleExport3Col = () => {
     if (!addresses.length) {
       openSnackbar('warning', 'Add at least one group address before exporting.');
       return;
     }
 
-    downloadGroupAddressesCsv(sortedAddresses, projectName);
-    openSnackbar('success', 'CSV export started.');
+    downloadGroupAddressesEtsCsv(sortedAddresses, projectName);
+    openSnackbar('success', 'ETS6 3-col CSV export started.');
+  };
+
+  const handleExportTree = (middleGroupName?: string) => {
+    if (!addresses.length) {
+      openSnackbar('warning', 'Add at least one group address before exporting.');
+      return;
+    }
+
+    downloadGroupAddressesEtsTreeCsv(sortedAddresses, projectName, middleGroupName);
+    openSnackbar('success', 'ETS6 tree CSV export started.');
   };
 
   return (
@@ -196,7 +210,8 @@ const App = () => {
         projectName={projectName}
         onProjectNameChange={setProjectName}
         onImportFile={handleImportFile}
-        onExport={handleExport}
+        onExport3Col={handleExport3Col}
+        onExportTree={handleExportTree}
       />
       <Container maxWidth="lg" sx={{ py: 4 }}>
         <Stack spacing={3}>

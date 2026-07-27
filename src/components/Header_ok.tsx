@@ -2,23 +2,14 @@ import { ChangeEvent, useRef } from 'react';
 import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutline';
-import {
-  AppBar,
-  Box,
-  Button,
-  Stack,
-  TextField,
-  Toolbar,
-  Typography,
-} from '@mui/material';
-import logo from '../assets/logo.png';
+import { AppBar, Box, Button, Stack, TextField, Toolbar, Typography } from '@mui/material';
 
 type HeaderProps = {
   projectName: string;
   onProjectNameChange: (projectName: string) => void;
   onImportFile: (file: File) => void | Promise<void>;
   onExport3Col: () => void;
-  onExportTree: (middleGroupName?: string) => void;
+  onExportTree: (middleGroupName?: string) => void; // changed
 };
 
 const Header = ({
@@ -36,7 +27,11 @@ const Header = ({
 
   const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) await onImportFile(file);
+
+    if (file) {
+      await onImportFile(file);
+    }
+
     event.target.value = '';
   };
 
@@ -45,52 +40,30 @@ const Header = ({
       'Enter middle-group name for ETS6 Tree export.\nLeave empty to skip middle-group rows:',
       ''
     );
-    if (input === null) return;
+
+    if (input === null) {
+      return; // cancelled
+    }
+
     onExportTree(input.trim());
   };
 
   return (
     <AppBar position="sticky" color="primary" elevation={0}>
       <Toolbar sx={{ gap: 2, flexWrap: 'wrap', py: 1 }}>
-        <Box
-          sx={{
-            flexGrow: 1,
-            minWidth: 240,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1.5,
-          }}
-        >
-          <Box
-            component="img"
-            src={logo}
-            alt="KNX Group Address Studio logo"
-            sx={{
-              height: 40,
-              width: 'auto',
-              maxWidth: 180,
-              objectFit: 'contain',
-              display: 'block',
-              flexShrink: 0,
-            }}
-          />
-          <Box>
-            <Typography variant="h5">KNX Group Address Studio</Typography>
-            <Typography variant="body2" sx={{ opacity: 0.85 }}>
-              Professional KNX group address management for desktop workflows
-            </Typography>
-          </Box>
+        <Box sx={{ flexGrow: 1, minWidth: 240 }}>
+          <Typography variant="h5">KNX Group Address Studio</Typography>
+          <Typography variant="body2" sx={{ opacity: 0.85 }}>
+            Professional KNX group address management for desktop workflows
+          </Typography>
         </Box>
-
         <TextField
           size="small"
           label="Project name"
           value={projectName}
           onChange={(event) => onProjectNameChange(event.target.value)}
           InputProps={{
-            startAdornment: (
-              <DriveFileRenameOutlineIcon sx={{ mr: 1 }} fontSize="small" />
-            ),
+            startAdornment: <DriveFileRenameOutlineIcon sx={{ mr: 1 }} fontSize="small" />,
           }}
           sx={{
             minWidth: { xs: '100%', sm: 220 },
@@ -103,7 +76,6 @@ const Header = ({
             },
           }}
         />
-
         <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
           <Button
             variant="contained"
@@ -130,7 +102,6 @@ const Header = ({
             Export CSV (ETS6 Tree)
           </Button>
         </Stack>
-
         <input
           ref={inputRef}
           hidden

@@ -33,7 +33,7 @@ const GroupAddressTable = ({
 }: GroupAddressTableProps) => {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [rowsPerPage, setRowsPerPage] = useState(100);
 
   const filteredAddresses = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -186,7 +186,7 @@ const GroupAddressTable = ({
           setRowsPerPage(Number(event.target.value));
           setPage(0);
         }}
-        rowsPerPageOptions={[5, 10, 25]}
+        rowsPerPageOptions={[10, 25, 50, 100, 200]}
       />
     </Paper>
   );

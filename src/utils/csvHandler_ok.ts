@@ -11,8 +11,6 @@ type ValidationResult =
 const REQUIRED_HEADERS = ['Address', 'Name', 'Description', 'DataPointType', 'Comment'];
 const GROUP_ADDRESS_PATTERN = /^\d+\/\d+\/\d+$/;
 const DPT_PATTERN = /^\d+\.\d{3}$/;
-const DPST_PATTERN = /^DPST-(\d+)-(\d+)$/i;
-const DEFAULT_DPT = '1.001';
 
 const escapeFilenamePart = (value: string) =>
   value.trim().replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '') || 'KNX-Project';
@@ -24,29 +22,6 @@ const readFileAsText = (file: File) =>
     reader.onerror = () => reject(new Error('Unable to read the selected CSV file.'));
     reader.readAsText(file, 'utf-8');
   });
-
-const normalizeDpt = (value: string) => {
-  const dpt = (value ?? '').trim();
-  return DPT_PATTERN.test(dpt) ? dpt : DEFAULT_DPT;
-};
-
-const dptToDpst = (dpt: string) => {
-  const value = normalizeDpt(dpt); // e.g. "9.001"
-  const match = /^(\d+)\.(\d{3})$/.exec(value);
-  if (!match) return 'DPST-1-1';
-  const main = Number(match[1]);
-  const sub = Number(match[2]); // "001" -> 1
-  return `DPST-${main}-${sub}`;
-};
-
-const dpstToDpt = (dpst: string) => {
-  const value = (dpst ?? '').trim();
-  const match = DPST_PATTERN.exec(value); // e.g. "DPST-9-1"
-  if (!match) return DEFAULT_DPT;
-  const main = match[1];
-  const sub = String(Number(match[2])).padStart(3, '0');
-  return `${main}.${sub}`;
-};
 
 const validateRow = (row: CsvRow, rowNumber: number): ValidationResult => {
   const address = row.Address?.trim() ?? '';
@@ -81,133 +56,42 @@ const validateRow = (row: CsvRow, rowNumber: number): ValidationResult => {
 
 export const parseGroupAddressesCsv = async (file: File) => {
   const csvText = await readFileAsText(file);
-
-  // 1) Try app CSV with headers first
-  const headerParse = Papa.parse<CsvRow>(csvText, {
+  const parseResult = Papa.parse<CsvRow>(csvText, {
     header: true,
     skipEmptyLines: true,
   });
 
-  if (headerParse.errors.length) {
-    throw new Error(headerParse.errors[0].message);
+  if (parseResult.errors.length) {
+    throw new Error(parseResult.errors[0].message);
   }
 
-  const headers = headerParse.meta.fields ?? [];
-  const hasAppHeaders = REQUIRED_HEADERS.every((header) => headers.includes(header));
+  const headers = parseResult.meta.fields ?? [];
+  const hasAllHeaders = REQUIRED_HEADERS.every((header) => headers.includes(header));
 
-  if (hasAppHeaders) {
-    const seenAddresses = new Set<string>();
-    const addresses: GroupAddress[] = [];
-    const errors: string[] = [];
-
-    headerParse.data.forEach((row, index) => {
-      const result = validateRow(row, index + 2);
-
-      if ('error' in result) {
-        errors.push(result.error);
-        return;
-      }
-
-      if (seenAddresses.has(result.address.address)) {
-        errors.push(`Row ${index + 2}: duplicate address "${result.address.address}" in import file.`);
-        return;
-      }
-
-      seenAddresses.add(result.address.address);
-      addresses.push(result.address);
-    });
-
-    return { addresses, errors };
-  }
-
-  // 2) Fallback: parse as plain rows for ETS formats
-  const rawParse = Papa.parse<string[]>(csvText, {
-    header: false,
-    skipEmptyLines: true,
-  });
-
-  if (rawParse.errors.length) {
-    throw new Error(rawParse.errors[0].message);
+  if (!hasAllHeaders) {
+    throw new Error(`Invalid CSV headers. Expected: ${REQUIRED_HEADERS.join(', ')}.`);
   }
 
   const seenAddresses = new Set<string>();
   const addresses: GroupAddress[] = [];
   const errors: string[] = [];
 
-  rawParse.data.forEach((cols, idx) => {
-    const rowNumber = idx + 1;
+  parseResult.data.forEach((row, index) => {
+    const result = validateRow(row, index + 2);
 
-    const c0 = (cols[0] ?? '').trim(); // ETS 3-col address
-    const c1 = (cols[1] ?? '').trim(); // ETS 3-col name
-    const c2 = (cols[2] ?? '').trim(); // ETS 3-col dpt OR tree leaf name
-    const c3 = (cols[3] ?? '').trim(); // tree leaf address
-    const c7 = (cols[7] ?? '').trim(); // tree leaf DPST in your ETS sample
-
-    // Skip likely header rows
-    if (c0.toLowerCase() === 'address' || c0.toLowerCase() === 'group address') {
+    if ('error' in result) {
+      errors.push(result.error);
       return;
     }
 
-    // ETS 3-col: address,name,dpt
-    if (GROUP_ADDRESS_PATTERN.test(c0)) {
-      const address = c0;
-      const name = c1;
-      const dpt = normalizeDpt(c2);
-
-      if (!name) {
-        errors.push(`Row ${rowNumber}: name is required.`);
-        return;
-      }
-
-      if (seenAddresses.has(address)) {
-        errors.push(`Row ${rowNumber}: duplicate address "${address}" in import file.`);
-        return;
-      }
-
-      seenAddresses.add(address);
-      addresses.push({
-        id: '',
-        address,
-        name,
-        description: '',
-        dpt,
-        comment: '',
-      });
+    if (seenAddresses.has(result.address.address)) {
+      errors.push(`Row ${index + 2}: duplicate address "${result.address.address}" in import file.`);
       return;
     }
 
-    // ETS tree leaf row:
-    // ,"","200 Garage, Ärvärde","5/0/10","","","","DPST-9-1","Auto"
-    if (GROUP_ADDRESS_PATTERN.test(c3) && c2) {
-      const address = c3;
-      const name = c2;
-      const dpt = DPST_PATTERN.test(c7) ? dpstToDpt(c7) : DEFAULT_DPT;
-
-      if (seenAddresses.has(address)) {
-        errors.push(`Row ${rowNumber}: duplicate address "${address}" in import file.`);
-        return;
-      }
-
-      seenAddresses.add(address);
-      addresses.push({
-        id: '',
-        address,
-        name,
-        description: '',
-        dpt,
-        comment: '',
-      });
-      return;
-    }
-
-    // Ignore middle-group rows / unknown rows
+    seenAddresses.add(result.address.address);
+    addresses.push(result.address);
   });
-
-  if (!addresses.length) {
-    throw new Error(
-      'Unsupported CSV format. Expected app CSV headers, ETS6 3-col, or ETS6 tree export.'
-    );
-  }
 
   return { addresses, errors };
 };
@@ -249,9 +133,9 @@ export const downloadGroupAddressesEtsCsv = (
   for (const a of addresses) {
     const address = (a.address ?? '').trim();
     const name = (a.name ?? '').trim();
-    const dpt = normalizeDpt(a.dpt ?? '');
+    const dpt = (a.dpt ?? '').trim();
 
-    if (!address || !name) continue;
+    if (!address || !name || !dpt) continue;
     lines.push([q(address), q(name), q(dpt)].join(','));
   }
 
@@ -263,7 +147,6 @@ export const downloadGroupAddressesEtsCsv = (
 /**
  * ETS6 tree-style CSV (9 columns), without project/root row.
  * If middleGroupName is blank, middle-group rows are omitted.
- * DPT is exported as DPST-x-y in column 8 (index 7), matching ETS sample.
  */
 export const downloadGroupAddressesEtsTreeCsv = (
   addresses: GroupAddress[],
@@ -308,20 +191,8 @@ export const downloadGroupAddressesEtsTreeCsv = (
     );
 
     for (const child of sortedChildren) {
-      const dpst = dptToDpst(child.dpt ?? DEFAULT_DPT);
-
       rows.push(
-        [
-          q(''),
-          q(''),
-          q(child.name ?? ''),
-          q(child.address ?? ''),
-          q(''),
-          q(''),
-          q(''),
-          q(dpst), // <-- ETS expects DPST here
-          q('Auto'),
-        ].join(',')
+        [q(''), q(''), q(child.name ?? ''), q(child.address ?? ''), q(''), q(''), q(''), q(''), q('Auto')].join(',')
       );
     }
   }

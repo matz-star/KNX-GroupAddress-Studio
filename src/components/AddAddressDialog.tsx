@@ -23,37 +23,14 @@ type AddAddressDialogProps = {
   open: boolean;
   initialValue: GroupAddress | null;
   onClose: () => void;
-  onSave: (value: AddressFormValue) => void;
+  onSave: (value: AddressFormValue, closeAfterSave?: boolean) => void;
 };
 
 const COMMON_DPT_CODES = new Set([
-  '1.001',
-  '1.002',
-  '3.007',
-  '3.008',
-  '5.001',
-  '5.003',
-  '6.001',
-  '7.001',
-  '8.001',
-  '9.001',
-  '9.004',
-  '9.005',
-  '9.006',
-  '9.007',
-  '10.001',
-  '11.001',
-  '12.001',
-  '13.001',
-  '14.019',
-  '14.027',
-  '14.056',
-  '16.001',
-  '17.001',
-  '18.001',
-  '19.001',
-  '20.102',
-  '232.600',
+  '1.001', '1.002', '3.007', '3.008', '5.001', '5.003', '6.001', '7.001',
+  '8.001', '9.001', '9.004', '9.005', '9.006', '9.007', '10.001', '11.001',
+  '12.001', '13.001', '14.019', '14.027', '14.056', '16.001', '17.001',
+  '18.001', '19.001', '20.102', '232.600',
 ]);
 
 const ALL_DPT_OPTIONS: DPTType[] = KNX_DPT_OPTIONS.map((option) => ({
@@ -107,7 +84,7 @@ const emptyFormValue: AddressFormValue = {
 };
 
 const GROUP_ADDRESS_PATTERN =
-  /^(?:[0-9]|1[0-5])\/(?:[0-9]|1[0-5])\/(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$/;
+  /^(?:[0-9]|[12][0-9]|3[01])\/(?:[0-7])\/(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$/;
 
 const dptFamily = (code: string): string => {
   const main = code.split('.')[0];
@@ -127,9 +104,9 @@ const splitKnxAddress = (address: string): [number, number, number] | null => {
     Number.isNaN(middle) ||
     Number.isNaN(sub) ||
     main < 0 ||
-    main > 15 ||
+    main > 31 ||
     middle < 0 ||
-    middle > 15 ||
+    middle > 7 ||
     sub < 0 ||
     sub > 255
   ) {
@@ -149,6 +126,28 @@ const addSuffixToName = (baseName: string, suffix: string): string => {
   return `${trimmed}, ${suffix}`;
 };
 
+const incrementAddress = (address: string): string => {
+  const parsed = splitKnxAddress(address);
+  if (!parsed) return address;
+
+  const [main, middle, sub] = parsed;
+  let nextMain = main;
+  let nextMiddle = middle;
+  let nextSub = sub + 1;
+
+  if (nextSub > 255) {
+    nextSub = 0;
+    nextMiddle += 1;
+    if (nextMiddle > 7) {
+      nextMiddle = 0;
+      nextMain += 1;
+      if (nextMain > 31) return '31/7/255';
+    }
+  }
+
+  return formatKnxAddress(nextMain, nextMiddle, nextSub);
+};
+
 const AddAddressDialog = ({
   open,
   initialValue,
@@ -157,25 +156,25 @@ const AddAddressDialog = ({
 }: AddAddressDialogProps) => {
   const [value, setValue] = useState<AddressFormValue>(emptyFormValue);
   const [submitted, setSubmitted] = useState(false);
-  const [showAllDpts, setShowAllDpts] = useState(false);
 
   useEffect(() => {
-    if (open) {
-      setValue(
-        initialValue
-          ? {
-              address: initialValue.address,
-              name: initialValue.name,
-              description: initialValue.description,
-              dpt: initialValue.dpt,
-              comment: initialValue.comment,
-            }
-          : emptyFormValue
-      );
-      setSubmitted(false);
-      setShowAllDpts(false);
-    }
-  }, [initialValue, open]);
+    if (!open) return;
+
+    setValue(
+      initialValue
+        ? {
+            address: initialValue.address,
+            name: initialValue.name,
+            description: initialValue.description,
+            dpt: initialValue.dpt,
+            comment: initialValue.comment,
+          }
+        : emptyFormValue
+    );
+    setSubmitted(false);
+  }, [open, initialValue?.id]); // do not reset on every parent rerender
+
+  const [showAllDpts, setShowAllDpts] = useState(false);
 
   const visibleDptOptions = useMemo(
     () => (showAllDpts ? ALL_DPT_OPTIONS : COMMON_DPT_OPTIONS),
@@ -196,12 +195,12 @@ const AddAddressDialog = ({
         !value.address.trim()
           ? 'Address is required.'
           : !GROUP_ADDRESS_PATTERN.test(value.address.trim())
-            ? 'Use KNX format X/Y/Z (0-15/0-15/0-255).'
+            ? 'Use KNX format X/Y/Z (0-31/0-7/0-255).'
             : '',
       name: value.name.trim() ? '' : 'Name is required.',
       dpt: /^\d+\.\d{3}$/.test(value.dpt.trim()) ? '' : 'Use DPT format X.XXX.',
     }),
-    [value.address, value.dpt, value.name]
+    [value.address, value.name, value.dpt]
   );
 
   const hasErrors = Boolean(errors.address || errors.name || errors.dpt);
@@ -214,10 +213,13 @@ const AddAddressDialog = ({
     comment: value.comment.trim(),
   });
 
-  const resetForNext = () => {
+  const keepOpenAndPrepareNext = (nextAddress?: string) => {
     setValue((current) => ({
-      ...emptyFormValue,
-      dpt: current.dpt || emptyFormValue.dpt,
+      ...current,
+      address: nextAddress ?? incrementAddress(current.address.trim()),
+      name: current.name, // keep name always
+      description: '',
+      comment: '',
     }));
     setSubmitted(false);
   };
@@ -225,137 +227,133 @@ const AddAddressDialog = ({
   const handleAddAndNext = () => {
     setSubmitted(true);
     if (hasErrors) return;
-
-    onSave(payloadFromValue());
-    resetForNext();
+    onSave(payloadFromValue(), false);
+    keepOpenAndPrepareNext();
   };
 
   const handleSaveAndClose = () => {
     setSubmitted(true);
     if (hasErrors) return;
-
-    onSave(payloadFromValue());
-    onClose();
+    onSave(payloadFromValue(), true);
   };
 
   const handleAddSwitch = () => {
     setSubmitted(true);
     if (hasErrors) return;
-
     const parsed = splitKnxAddress(value.address.trim());
     if (!parsed) return;
 
     const [main, middle, sub] = parsed;
     const baseName = value.name.trim();
 
-    const first: AddressFormValue = {
-      ...payloadFromValue(),
-      address: formatKnxAddress(main, middle, sub),
-      name: addSuffixToName(baseName, 'Till/Från'),
-      dpt: '1.001',
-    };
-    onSave(first);
+    onSave(
+      {
+        ...payloadFromValue(),
+        address: formatKnxAddress(main, middle, sub),
+        name: addSuffixToName(baseName, 'Till/Från'),
+        dpt: '1.001',
+      },
+      false
+    );
 
     if (sub < 255) {
-      const second: AddressFormValue = {
-        ...payloadFromValue(),
-        address: formatKnxAddress(main, middle, sub + 1),
-        name: addSuffixToName(baseName, 'Till/Från Status'),
-        dpt: '1.002',
-      };
-      onSave(second);
+      onSave(
+        {
+          ...payloadFromValue(),
+          address: formatKnxAddress(main, middle, sub + 1),
+          name: addSuffixToName(baseName, 'Till/Från Status'),
+          dpt: '1.002',
+        },
+        false
+      );
     }
 
-    resetForNext();
+    keepOpenAndPrepareNext(formatKnxAddress(main, middle, Math.min(sub + 2, 255)));
   };
 
   const handleAddDimmer = () => {
     setSubmitted(true);
     if (hasErrors) return;
-
     const parsed = splitKnxAddress(value.address.trim());
     if (!parsed) return;
 
     const [main, middle, sub] = parsed;
+    if (sub > 251) return;
     const baseName = value.name.trim();
 
-    // Need sub..sub+4
-    if (sub > 251) return;
-
     for (const item of DIMMER_SUFFIXES) {
-      const entry: AddressFormValue = {
-        ...payloadFromValue(),
-        address: formatKnxAddress(main, middle, sub + item.offset),
-        name: addSuffixToName(baseName, item.suffix),
-        dpt: item.dpt,
-      };
-      onSave(entry);
+      onSave(
+        {
+          ...payloadFromValue(),
+          address: formatKnxAddress(main, middle, sub + item.offset),
+          name: addSuffixToName(baseName, item.suffix),
+          dpt: item.dpt,
+        },
+        false
+      );
     }
 
-    resetForNext();
+    keepOpenAndPrepareNext(formatKnxAddress(main, middle, sub + 5));
   };
 
   const handleAddRtc = () => {
     setSubmitted(true);
     if (hasErrors) return;
-
     const parsed = splitKnxAddress(value.address.trim());
     if (!parsed) return;
 
     const [main, middle, sub] = parsed;
+    if (sub > 246) return;
     const baseName = value.name.trim();
 
-    // Need sub..sub+9
-    if (sub > 246) return;
-
     for (const item of RTC_SUFFIXES) {
-      const entry: AddressFormValue = {
-        ...payloadFromValue(),
-        address: formatKnxAddress(main, middle, sub + item.offset),
-        name: addSuffixToName(baseName, item.suffix),
-        dpt: item.dpt,
-      };
-      onSave(entry);
+      onSave(
+        {
+          ...payloadFromValue(),
+          address: formatKnxAddress(main, middle, sub + item.offset),
+          name: addSuffixToName(baseName, item.suffix),
+          dpt: item.dpt,
+        },
+        false
+      );
     }
 
-    resetForNext();
+    keepOpenAndPrepareNext(formatKnxAddress(main, middle, sub + 10));
   };
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
-      <DialogTitle>
-        {initialValue ? 'Edit group address' : 'Add group address'}
-      </DialogTitle>
+      <DialogTitle>{initialValue ? 'Edit group address' : 'Add group address'}</DialogTitle>
       <DialogContent>
         <Grid container spacing={2} sx={{ pt: 1 }}>
           <Grid item xs={12} sm={6}>
             <TextField
-              fullWidth
-              required
-              label="Address"
-              value={value.address}
-              onKeyDown={(event) => {
-                if (event.key === ' ') {
-                  event.preventDefault();
-                  setValue((current) => {
-                    const text = current.address;
-                    const slashCount = (text.match(/\//g) || []).length;
-                    if (slashCount >= 2) return current;
-                    if (text.endsWith('/')) return current;
-                    return { ...current, address: `${text}/` };
-                  });
-                }
-              }}
-              onChange={(event) =>
-                setValue((current) => ({
-                  ...current,
-                  address: event.target.value,
-                }))
-              }
-              error={submitted && Boolean(errors.address)}
-              helperText={submitted ? errors.address : ' '}
-              placeholder="1/0/10"
-            />
+  fullWidth
+  required
+  label="Address"
+  value={value.address}
+  onKeyDown={(event) => {
+    if (event.key === ' ') {
+      event.preventDefault();
+      setValue((current) => {
+        const text = current.address;
+        const slashCount = (text.match(/\//g) || []).length;
+        if (slashCount >= 2) return current;   // already X/Y/Z structure
+        if (text.endsWith('/')) return current; // avoid duplicate slash
+        return { ...current, address: `${text}/` };
+      });
+    }
+  }}
+  onChange={(event) =>
+    setValue((current) => ({
+      ...current,
+      address: event.target.value,
+    }))
+  }
+  error={submitted && Boolean(errors.address)}
+  helperText={submitted ? errors.address : ' '}
+  placeholder="1/0/10"
+/>
           </Grid>
 
           <Grid item xs={12} sm={6}>

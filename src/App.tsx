@@ -82,47 +82,49 @@ const App = () => {
     setEditingAddress(null);
   };
 
-  const handleSaveAddress = (input: Omit<GroupAddress, 'id'>) => {
+  const handleSaveAddress = (
+    input: Omit<GroupAddress, 'id'>,
+    closeAfterSave = true
+  ) => {
     const normalizedAddress = input.address.trim();
-    const duplicate = addresses.find(
-      (address) =>
-        address.address === normalizedAddress &&
-        address.id !== editingAddress?.id
-    );
 
-    if (duplicate) {
-      openSnackbar('error', `Group address ${normalizedAddress} already exists.`);
-      return;
-    }
+    setAddresses((current) => {
+      const duplicate = current.find(
+        (address) =>
+          address.address === normalizedAddress &&
+          address.id !== editingAddress?.id
+      );
 
-    if (editingAddress) {
-      setAddresses((current) =>
-        current.map((address) =>
+      if (duplicate) {
+        openSnackbar('error', `Group address ${normalizedAddress} already exists.`);
+        return current;
+      }
+
+      if (editingAddress) {
+        openSnackbar('success', `Updated ${normalizedAddress}.`);
+        return current.map((address) =>
           address.id === editingAddress.id
             ? { ...editingAddress, ...input, address: normalizedAddress }
             : address
-        )
-      );
-      openSnackbar('success', `Updated ${normalizedAddress}.`);
-    } else {
-      setAddresses((current) => [
+        );
+      }
+
+      openSnackbar('success', `Added ${normalizedAddress}.`);
+      return [
         ...current,
         { id: createAddressId(), ...input, address: normalizedAddress },
-      ]);
-      openSnackbar('success', `Added ${normalizedAddress}.`);
-    }
+      ];
+    });
 
-    handleCloseDialog();
+    if (closeAfterSave) {
+      handleCloseDialog();
+    }
   };
 
   const handleDeleteSelected = () => {
-    if (!selectedCount) {
-      return;
-    }
+    if (!selectedCount) return;
 
-    if (!window.confirm(`Delete ${selectedCount} selected group address(es)?`)) {
-      return;
-    }
+    if (!window.confirm(`Delete ${selectedCount} selected group address(es)?`)) return;
 
     setAddresses((current) =>
       current.filter((address) => !selectedIds.includes(address.id))
@@ -167,14 +169,10 @@ const App = () => {
         return;
       }
 
-      const messages = [];
+      const messages: string[] = [];
       messages.push(`Imported ${addedCount} group address(es).`);
-      if (duplicateCount) {
-        messages.push(`Skipped ${duplicateCount} duplicate(s).`);
-      }
-      if (errors.length) {
-        messages.push(`${errors.length} invalid row(s) ignored.`);
-      }
+      if (duplicateCount) messages.push(`Skipped ${duplicateCount} duplicate(s).`);
+      if (errors.length) messages.push(`${errors.length} invalid row(s) ignored.`);
       openSnackbar('success', messages.join(' '));
     } catch (error) {
       openSnackbar(
@@ -184,24 +182,38 @@ const App = () => {
     }
   };
 
-  const handleExport3Col = () => {
+  const handleExport3Col = async () => {
     if (!addresses.length) {
       openSnackbar('warning', 'Add at least one group address before exporting.');
       return;
     }
 
-    downloadGroupAddressesEtsCsv(sortedAddresses, projectName);
-    openSnackbar('success', 'ETS6 3-col CSV export started.');
+    try {
+      await downloadGroupAddressesEtsCsv(sortedAddresses, projectName);
+      openSnackbar('success', 'ETS6 3-col CSV export completed.');
+    } catch (error) {
+      openSnackbar(
+        'error',
+        error instanceof Error ? error.message : 'Failed to export ETS6 3-col CSV.'
+      );
+    }
   };
 
-  const handleExportTree = (middleGroupName?: string) => {
+  const handleExportTree = async (middleGroupName?: string) => {
     if (!addresses.length) {
       openSnackbar('warning', 'Add at least one group address before exporting.');
       return;
     }
 
-    downloadGroupAddressesEtsTreeCsv(sortedAddresses, projectName, middleGroupName);
-    openSnackbar('success', 'ETS6 tree CSV export started.');
+    try {
+      await downloadGroupAddressesEtsTreeCsv(sortedAddresses, projectName, middleGroupName);
+      openSnackbar('success', 'ETS6 tree CSV export completed.');
+    } catch (error) {
+      openSnackbar(
+        'error',
+        error instanceof Error ? error.message : 'Failed to export ETS6 tree CSV.'
+      );
+    }
   };
 
   return (
@@ -213,6 +225,7 @@ const App = () => {
         onExport3Col={handleExport3Col}
         onExportTree={handleExportTree}
       />
+
       <Container maxWidth="lg" sx={{ py: 4 }}>
         <Stack spacing={3}>
           <ControlPanel
@@ -229,12 +242,14 @@ const App = () => {
           />
         </Stack>
       </Container>
+
       <AddAddressDialog
         open={dialogOpen}
         initialValue={editingAddress}
         onClose={handleCloseDialog}
         onSave={handleSaveAddress}
       />
+
       <Snackbar
         open={Boolean(snackbar.message)}
         autoHideDuration={4000}

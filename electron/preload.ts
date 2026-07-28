@@ -1,4 +1,4 @@
-import { contextBridge } from 'electron';
+import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('knxStudio', {
   platform: process.platform,
@@ -7,4 +7,11 @@ contextBridge.exposeInMainWorld('knxStudio', {
     electron: process.versions.electron,
     node: process.versions.node,
   },
+
+  exportEts6Csv: (csvContent: string) =>
+    ipcRenderer.invoke('export-ets6-csv', csvContent) as Promise<{
+      ok: boolean;
+      canceled?: boolean;
+      filePath?: string;
+    }>,
 });

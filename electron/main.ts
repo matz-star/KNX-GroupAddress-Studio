@@ -1,6 +1,7 @@
 import path from 'path';
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, shell, dialog, ipcMain } from 'electron';
 import isDev from 'electron-is-dev';
+import fs from 'fs/promises';
 
 const createWindow = () => {
   const window = new BrowserWindow({
@@ -30,6 +31,22 @@ const createWindow = () => {
     void window.loadFile(path.join(__dirname, '..', 'build', 'index.html'));
   }
 };
+
+// CSV export handler (works in dev + packaged)
+ipcMain.handle('export-ets6-csv', async (_event, csvContent: string) => {
+  const { canceled, filePath } = await dialog.showSaveDialog({
+    title: 'Export ETS6 Tree CSV',
+    defaultPath: 'ETS6-GroupAddress-Tree.csv',
+    filters: [{ name: 'CSV', extensions: ['csv'] }],
+  });
+
+  if (canceled || !filePath) {
+    return { ok: false, canceled: true };
+  }
+
+  await fs.writeFile(filePath, csvContent, 'utf8');
+  return { ok: true, canceled: false, filePath };
+});
 
 app.whenReady().then(() => {
   createWindow();

@@ -14,8 +14,8 @@
     "build": "npm run build:react && npm run build:electron",
     "build:react": "react-scripts build",
     "build:electron": "tsc --project electron/tsconfig.json",
-    "dist": "npm run build && electron-builder",
-    "dist:win": "npm run build && electron-builder --win"
+    "dist": "npm run build && electron-builder --publish never",
+    "dist:win": "npm run build && electron-builder --win nsis portable --x64 --publish never"
   },
   "dependencies": {
     "@emotion/react": "^11.11.1",
@@ -26,6 +26,7 @@
     "papaparse": "^5.4.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-draggable": "^4.7.0",
     "react-scripts": "5.0.1"
   },
   "devDependencies": {
@@ -36,25 +37,38 @@
     "concurrently": "^8.2.0",
     "cross-env": "^7.0.3",
     "electron": "^25.3.0",
-    "electron-builder": "^24.4.0",
+    "electron-builder": "^24.13.3",
     "typescript": "^4.9.5",
     "wait-on": "^7.0.1"
   },
   "build": {
+    "extends": null,
     "appId": "com.knx.groupaddressstudio",
     "productName": "KNX Group Address Studio",
+    "asar": true,
     "files": [
-      "dist",
-      "build",
-      "node_modules"
+      "build/**/*",
+      "dist/main.js",
+      "dist/preload.js",
+      "package.json"
     ],
+    "extraMetadata": {
+      "main": "dist/main.js"
+    },
     "directories": {
+      "output": "release",
       "buildResources": "assets"
     },
     "win": {
       "target": [
-        "nsis",
-        "portable"
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
       ]
     },
     "nsis": {

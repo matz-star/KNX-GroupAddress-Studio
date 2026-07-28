@@ -156,6 +156,7 @@ const AddAddressDialog = ({
 }: AddAddressDialogProps) => {
   const [value, setValue] = useState<AddressFormValue>(emptyFormValue);
   const [submitted, setSubmitted] = useState(false);
+  const [showAllDpts, setShowAllDpts] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -172,9 +173,7 @@ const AddAddressDialog = ({
         : emptyFormValue
     );
     setSubmitted(false);
-  }, [open, initialValue?.id]); // do not reset on every parent rerender
-
-  const [showAllDpts, setShowAllDpts] = useState(false);
+  }, [open, initialValue?.id]);
 
   const visibleDptOptions = useMemo(
     () => (showAllDpts ? ALL_DPT_OPTIONS : COMMON_DPT_OPTIONS),
@@ -217,7 +216,7 @@ const AddAddressDialog = ({
     setValue((current) => ({
       ...current,
       address: nextAddress ?? incrementAddress(current.address.trim()),
-      name: current.name, // keep name always
+      name: current.name,
       description: '',
       comment: '',
     }));
@@ -322,38 +321,57 @@ const AddAddressDialog = ({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
-      <DialogTitle>{initialValue ? 'Edit group address' : 'Add group address'}</DialogTitle>
+    <Dialog
+  open={open}
+  onClose={onClose}
+  fullWidth
+  maxWidth="md"
+  aria-labelledby="add-address-dialog-title"
+  PaperProps={{
+    sx: {
+      ml: { xs: 0, md: 100 }, // move right on desktop
+    },
+  }}
+>
+      <DialogTitle
+        id="add-address-dialog-title"
+        sx={{
+          userSelect: 'none',
+        }}
+      >
+        {initialValue ? 'Edit group address' : 'Add group address'}
+      </DialogTitle>
+
       <DialogContent>
         <Grid container spacing={2} sx={{ pt: 1 }}>
           <Grid item xs={12} sm={6}>
             <TextField
-  fullWidth
-  required
-  label="Address"
-  value={value.address}
-  onKeyDown={(event) => {
-    if (event.key === ' ') {
-      event.preventDefault();
-      setValue((current) => {
-        const text = current.address;
-        const slashCount = (text.match(/\//g) || []).length;
-        if (slashCount >= 2) return current;   // already X/Y/Z structure
-        if (text.endsWith('/')) return current; // avoid duplicate slash
-        return { ...current, address: `${text}/` };
-      });
-    }
-  }}
-  onChange={(event) =>
-    setValue((current) => ({
-      ...current,
-      address: event.target.value,
-    }))
-  }
-  error={submitted && Boolean(errors.address)}
-  helperText={submitted ? errors.address : ' '}
-  placeholder="1/0/10"
-/>
+              fullWidth
+              required
+              label="Address"
+              value={value.address}
+              onKeyDown={(event) => {
+                if (event.key === ' ') {
+                  event.preventDefault();
+                  setValue((current) => {
+                    const text = current.address;
+                    const slashCount = (text.match(/\//g) || []).length;
+                    if (slashCount >= 2) return current;
+                    if (text.endsWith('/')) return current;
+                    return { ...current, address: `${text}/` };
+                  });
+                }
+              }}
+              onChange={(event) =>
+                setValue((current) => ({
+                  ...current,
+                  address: event.target.value,
+                }))
+              }
+              error={submitted && Boolean(errors.address)}
+              helperText={submitted ? errors.address : ' '}
+              placeholder="1/0/10"
+            />
           </Grid>
 
           <Grid item xs={12} sm={6}>

@@ -17,8 +17,8 @@ type HeaderProps = {
   projectName: string;
   onProjectNameChange: (projectName: string) => void;
   onImportFile: (file: File) => void | Promise<void>;
-  onExport3Col: () => void;
-  onExportTree: (middleGroupName?: string) => void;
+  onExport3Col: () => void | Promise<void>;
+  onExportTree: () => void | Promise<void>;
 };
 
 const Header = ({
@@ -38,15 +38,6 @@ const Header = ({
     const file = event.target.files?.[0];
     if (file) await onImportFile(file);
     event.target.value = '';
-  };
-
-  const handleExportTreeClick = () => {
-    const input = window.prompt(
-      'Enter middle-group name for ETS6 Tree export.\nLeave empty to skip middle-group rows:',
-      ''
-    );
-    if (input === null) return;
-    onExportTree(input.trim());
   };
 
   return (
@@ -117,7 +108,7 @@ const Header = ({
             variant="outlined"
             color="inherit"
             startIcon={<CloudDownloadIcon />}
-            onClick={onExport3Col}
+            onClick={() => void onExport3Col()}
           >
             Export CSV (ETS6 3-col)
           </Button>
@@ -125,7 +116,7 @@ const Header = ({
             variant="outlined"
             color="inherit"
             startIcon={<CloudDownloadIcon />}
-            onClick={handleExportTreeClick}
+            onClick={() => void onExportTree()}
           >
             Export CSV (ETS6 Tree)
           </Button>

@@ -199,14 +199,14 @@ const App = () => {
     }
   };
 
-  const handleExportTree = async (middleGroupName?: string) => {
+  const handleExportTree = async () => {
     if (!addresses.length) {
       openSnackbar('warning', 'Add at least one group address before exporting.');
       return;
     }
 
     try {
-      await downloadGroupAddressesEtsTreeCsv(sortedAddresses, projectName, middleGroupName);
+      await downloadGroupAddressesEtsTreeCsv(sortedAddresses, projectName, '');
       openSnackbar('success', 'ETS6 tree CSV export completed.');
     } catch (error) {
       openSnackbar(

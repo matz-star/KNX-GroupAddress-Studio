@@ -31,17 +31,17 @@ const normalizeDpt = (value: string) => {
 };
 
 const dptToDpst = (dpt: string) => {
-  const value = normalizeDpt(dpt); // e.g. "9.001"
+  const value = normalizeDpt(dpt);
   const match = /^(\d+)\.(\d{3})$/.exec(value);
   if (!match) return 'DPST-1-1';
   const main = Number(match[1]);
-  const sub = Number(match[2]); // "001" -> 1
+  const sub = Number(match[2]);
   return `DPST-${main}-${sub}`;
 };
 
 const dpstToDpt = (dpst: string) => {
   const value = (dpst ?? '').trim();
-  const match = DPST_PATTERN.exec(value); // e.g. "DPST-9-1"
+  const match = DPST_PATTERN.exec(value);
   if (!match) return DEFAULT_DPT;
   const main = match[1];
   const sub = String(Number(match[2])).padStart(3, '0');
@@ -82,7 +82,6 @@ const validateRow = (row: CsvRow, rowNumber: number): ValidationResult => {
 export const parseGroupAddressesCsv = async (file: File) => {
   const csvText = await readFileAsText(file);
 
-  // 1) Try app CSV with headers first
   const headerParse = Papa.parse<CsvRow>(csvText, {
     header: true,
     skipEmptyLines: true,
@@ -120,7 +119,6 @@ export const parseGroupAddressesCsv = async (file: File) => {
     return { addresses, errors };
   }
 
-  // 2) Fallback: parse as plain rows for ETS formats
   const rawParse = Papa.parse<string[]>(csvText, {
     header: false,
     skipEmptyLines: true,
@@ -137,18 +135,16 @@ export const parseGroupAddressesCsv = async (file: File) => {
   rawParse.data.forEach((cols, idx) => {
     const rowNumber = idx + 1;
 
-    const c0 = (cols[0] ?? '').trim(); // ETS 3-col address
-    const c1 = (cols[1] ?? '').trim(); // ETS 3-col name
-    const c2 = (cols[2] ?? '').trim(); // ETS 3-col dpt OR tree leaf name
-    const c3 = (cols[3] ?? '').trim(); // tree leaf address
-    const c7 = (cols[7] ?? '').trim(); // tree leaf DPST in your ETS sample
+    const c0 = (cols[0] ?? '').trim();
+    const c1 = (cols[1] ?? '').trim();
+    const c2 = (cols[2] ?? '').trim();
+    const c3 = (cols[3] ?? '').trim();
+    const c7 = (cols[7] ?? '').trim();
 
-    // Skip likely header rows
     if (c0.toLowerCase() === 'address' || c0.toLowerCase() === 'group address') {
       return;
     }
 
-    // ETS 3-col: address,name,dpt
     if (GROUP_ADDRESS_PATTERN.test(c0)) {
       const address = c0;
       const name = c1;
@@ -176,8 +172,6 @@ export const parseGroupAddressesCsv = async (file: File) => {
       return;
     }
 
-    // ETS tree leaf row:
-    // ,"","200 Garage, Ärvärde","5/0/10","","","","DPST-9-1","Auto"
     if (GROUP_ADDRESS_PATTERN.test(c3) && c2) {
       const address = c3;
       const name = c2;
@@ -197,10 +191,7 @@ export const parseGroupAddressesCsv = async (file: File) => {
         dpt,
         comment: '',
       });
-      return;
     }
-
-    // Ignore middle-group rows / unknown rows
   });
 
   if (!addresses.length) {
@@ -212,7 +203,7 @@ export const parseGroupAddressesCsv = async (file: File) => {
   return { addresses, errors };
 };
 
-const downloadTextFile = (filename: string, content: string, withBom = false) => {
+const downloadTextFileBrowser = (filename: string, content: string, withBom = false) => {
   const BOM = '\uFEFF';
   const data = withBom ? BOM + content : content;
   const blob = new Blob([data], { type: 'text/csv;charset=utf-8;' });
@@ -227,19 +218,35 @@ const downloadTextFile = (filename: string, content: string, withBom = false) =>
   URL.revokeObjectURL(url);
 };
 
+const saveCsv = async (filename: string, content: string, withBom = false) => {
+  const BOM = '\uFEFF';
+  const data = withBom ? BOM + content : content;
+
+  const electronExport = window.knxStudio?.exportEts6Csv;
+  if (typeof electronExport === 'function') {
+    const result = await electronExport(data);
+    if (!result?.ok && !result?.canceled) {
+      throw new Error('Failed to save CSV file.');
+    }
+    return;
+  }
+
+  downloadTextFileBrowser(filename, content, withBom);
+};
+
 // Backward compatibility
-export const downloadGroupAddressesCsv = (
+export const downloadGroupAddressesCsv = async (
   addresses: GroupAddress[],
   projectName: string
 ) => {
-  downloadGroupAddressesEtsCsv(addresses, projectName);
+  await downloadGroupAddressesEtsCsv(addresses, projectName);
 };
 
 /**
  * ETS6 3-column CSV:
  * "0/0/1","Name","1.001"
  */
-export const downloadGroupAddressesEtsCsv = (
+export const downloadGroupAddressesEtsCsv = async (
   addresses: GroupAddress[],
   projectName: string
 ) => {
@@ -257,15 +264,13 @@ export const downloadGroupAddressesEtsCsv = (
 
   const csv = lines.join('\r\n');
   const date = new Date().toISOString().slice(0, 10);
-  downloadTextFile(`${escapeFilenamePart(projectName)}_${date}_ETS6_3col.csv`, csv, true);
+  await saveCsv(`${escapeFilenamePart(projectName)}_${date}_ETS6_3col.csv`, csv, true);
 };
 
 /**
  * ETS6 tree-style CSV (9 columns), without project/root row.
- * If middleGroupName is blank, middle-group rows are omitted.
- * DPT is exported as DPST-x-y in column 8 (index 7), matching ETS sample.
  */
-export const downloadGroupAddressesEtsTreeCsv = (
+export const downloadGroupAddressesEtsTreeCsv = async (
   addresses: GroupAddress[],
   projectName: string,
   middleGroupName?: string
@@ -274,9 +279,8 @@ export const downloadGroupAddressesEtsTreeCsv = (
   const manualGroupName = (middleGroupName ?? '').trim();
 
   const rows: string[] = [];
-
-  // Group addresses by main/middle
   const grouped = new Map<string, GroupAddress[]>();
+
   for (const a of addresses) {
     const addr = (a.address ?? '').trim();
     if (!GROUP_ADDRESS_PATTERN.test(addr)) continue;
@@ -294,14 +298,12 @@ export const downloadGroupAddressesEtsTreeCsv = (
   for (const key of sortedGroupKeys) {
     const [main, middle] = key.split('/');
 
-    // Middle-group row only when user provided a label
     if (manualGroupName) {
       rows.push(
         [q(''), q(manualGroupName), q(''), q(`${main}/${middle}/-`), q(''), q(''), q(''), q(''), q('Auto')].join(',')
       );
     }
 
-    // Leaf rows
     const children = grouped.get(key)!;
     const sortedChildren = [...children].sort((l, r) =>
       l.address.localeCompare(r.address, undefined, { numeric: true })
@@ -319,7 +321,7 @@ export const downloadGroupAddressesEtsTreeCsv = (
           q(''),
           q(''),
           q(''),
-          q(dpst), // <-- ETS expects DPST here
+          q(dpst),
           q('Auto'),
         ].join(',')
       );
@@ -328,28 +330,22 @@ export const downloadGroupAddressesEtsTreeCsv = (
 
   const csv = rows.join('\r\n');
   const date = new Date().toISOString().slice(0, 10);
-  downloadTextFile(`${escapeFilenamePart(projectName)}_${date}_ETS6_tree.csv`, csv, true);
+  await saveCsv(`${escapeFilenamePart(projectName)}_${date}_ETS6_tree.csv`, csv, true);
 };
 
-/**
- * Helper for UI button:
- * prompts user for middle-group name before ETS tree export.
- * - Cancel => no export
- * - Empty input => export without middle-group rows
- */
-export const promptAndDownloadGroupAddressesEtsTreeCsv = (
+export const promptAndDownloadGroupAddressesEtsTreeCsv = async (
   addresses: GroupAddress[],
   projectName: string
-): boolean => {
+): Promise<boolean> => {
   const input = window.prompt(
     'Enter middle-group name for ETS6 tree export.\nLeave empty to skip middle-group rows:',
     ''
   );
 
   if (input === null) {
-    return false; // user cancelled
+    return false;
   }
 
-  downloadGroupAddressesEtsTreeCsv(addresses, projectName, input);
+  await downloadGroupAddressesEtsTreeCsv(addresses, projectName, input);
   return true;
 };

@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const path_1 = __importDefault(require("path"));
 const electron_1 = require("electron");
 const electron_is_dev_1 = __importDefault(require("electron-is-dev"));
+const promises_1 = __importDefault(require("fs/promises"));
 const createWindow = () => {
     const window = new electron_1.BrowserWindow({
         width: 1440,
@@ -33,6 +34,19 @@ const createWindow = () => {
         void window.loadFile(path_1.default.join(__dirname, '..', 'build', 'index.html'));
     }
 };
+// CSV export handler (works in dev + packaged)
+electron_1.ipcMain.handle('export-ets6-csv', async (_event, csvContent) => {
+    const { canceled, filePath } = await electron_1.dialog.showSaveDialog({
+        title: 'Export ETS6 Tree CSV',
+        defaultPath: 'ETS6-GroupAddress-Tree.csv',
+        filters: [{ name: 'CSV', extensions: ['csv'] }],
+    });
+    if (canceled || !filePath) {
+        return { ok: false, canceled: true };
+    }
+    await promises_1.default.writeFile(filePath, csvContent, 'utf8');
+    return { ok: true, canceled: false, filePath };
+});
 electron_1.app.whenReady().then(() => {
     createWindow();
     electron_1.app.on('activate', () => {

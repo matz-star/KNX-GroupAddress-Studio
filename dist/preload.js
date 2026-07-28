@@ -8,4 +8,5 @@ electron_1.contextBridge.exposeInMainWorld('knxStudio', {
         electron: process.versions.electron,
         node: process.versions.node,
     },
+    exportEts6Csv: (csvContent) => electron_1.ipcRenderer.invoke('export-ets6-csv', csvContent),
 });

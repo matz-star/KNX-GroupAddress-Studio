@@ -19,6 +19,7 @@ type HeaderProps = {
   onImportFile: (file: File) => void | Promise<void>;
   onExport3Col: () => void | Promise<void>;
   onExportTree: () => void | Promise<void>;
+  onExportEts5Xml: () => void;
 };
 
 const Header = ({
@@ -27,6 +28,7 @@ const Header = ({
   onImportFile,
   onExport3Col,
   onExportTree,
+  onExportEts5Xml,
 }: HeaderProps) => {
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -42,7 +44,17 @@ const Header = ({
 
   return (
     <AppBar position="sticky" color="primary" elevation={0}>
-      <Toolbar sx={{ gap: 2, flexWrap: 'wrap', py: 1 }}>
+      <Toolbar
+        sx={{
+          gap: 2,
+          flexWrap: 'wrap',
+          py: 1,
+          WebkitAppRegion: 'no-drag',
+          '& button, & input, & textarea, & .MuiInputBase-root, & [role="button"]': {
+            WebkitAppRegion: 'no-drag',
+          },
+        }}
+      >
         <Box
           sx={{
             flexGrow: 1,
@@ -50,6 +62,7 @@ const Header = ({
             display: 'flex',
             alignItems: 'center',
             gap: 1.5,
+            WebkitAppRegion: 'no-drag',
           }}
         >
           <Box
@@ -65,7 +78,7 @@ const Header = ({
               flexShrink: 0,
             }}
           />
-          <Box>
+          <Box sx={{ WebkitAppRegion: 'no-drag' }}>
             <Typography variant="h5">KNX Group Address Studio</Typography>
             <Typography variant="body2" sx={{ opacity: 0.85 }}>
               Professional KNX group address management for desktop workflows
@@ -87,7 +100,11 @@ const Header = ({
             minWidth: { xs: '100%', sm: 220 },
             backgroundColor: 'rgba(255,255,255,0.08)',
             borderRadius: 1,
-            '& .MuiInputBase-root': { color: 'common.white' },
+            WebkitAppRegion: 'no-drag',
+            '& .MuiInputBase-root': {
+              color: 'common.white',
+              WebkitAppRegion: 'no-drag',
+            },
             '& .MuiInputLabel-root': { color: 'rgba(255,255,255,0.8)' },
             '& .MuiOutlinedInput-notchedOutline': {
               borderColor: 'rgba(255,255,255,0.25)',
@@ -95,14 +112,18 @@ const Header = ({
           }}
         />
 
-        <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
+        <Stack
+          direction="row"
+          spacing={1}
+          sx={{ flexWrap: 'wrap', WebkitAppRegion: 'no-drag' }}
+        >
           <Button
             variant="contained"
             color="secondary"
             startIcon={<CloudUploadIcon />}
             onClick={handleImportClick}
           >
-            Import CSV
+            Import
           </Button>
           <Button
             variant="outlined"
@@ -120,13 +141,20 @@ const Header = ({
           >
             Export CSV (ETS6 Tree)
           </Button>
+          <Button
+            variant="contained"
+            color="secondary"
+            onClick={onExportEts5Xml}
+          >
+            Export ETS5 XML
+          </Button>
         </Stack>
 
         <input
           ref={inputRef}
           hidden
           type="file"
-          accept=".csv,text/csv"
+          accept=".csv,text/csv,.xml,application/xml,text/xml"
           onChange={handleFileChange}
         />
       </Toolbar>

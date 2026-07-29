@@ -48,10 +48,19 @@ const NAME_SUFFIXES = [
   'Dim',
   'Ljusvärde',
   'Ljusv.Status',
-  'Ärvärde',
-  'Börvärde',
-  'Ändra börvärde',
+  'ÄR',
+  'BÖR',
+  'BÖR Status',
   'Styr',
+  'Downl.',
+  'Väggbel',
+  'Lampett',
+  'Pendel',
+  'Nisch',
+  'Tak Pendel',
+  'LU Tak',
+  'LU Fönster',
+  'Styrda Uttag',
 ] as const;
 
 const DIMMER_SUFFIXES = [
@@ -62,17 +71,30 @@ const DIMMER_SUFFIXES = [
   { suffix: 'Ljusv.Status', dpt: '5.001', offset: 4 },
 ] as const;
 
+const TUNABLE_WHITE_EXTRA_SUFFIXES = [
+  { suffix: 'Absolut Färgtemp', dpt: '7.600', offset: 5 },
+  { suffix: 'Absolut Färgtemp.Status', dpt: '7.600', offset: 6 },
+  { suffix: 'Färgtemp, Dim', dpt: '3.007', offset: 7 },
+  { suffix: 'Res', dpt: '1.001', offset: 8 },
+  { suffix: 'Res', dpt: '1.001', offset: 9 },
+] as const;
+
 const RTC_SUFFIXES = [
-  { suffix: 'Ärvärde', dpt: '9.001', offset: 0 },
-  { suffix: 'Börvärde', dpt: '9.001', offset: 1 },
-  { suffix: 'Ändra börvärde', dpt: '6.010', offset: 2 },
+  { suffix: 'ÄR', dpt: '9.001', offset: 0 },
+  { suffix: 'BÖR', dpt: '9.001', offset: 1 },
+  { suffix: 'BÖR Status', dpt: '6.010', offset: 2 },
   { suffix: 'Driftläge', dpt: '20.102', offset: 3 },
   { suffix: 'Styr Värme', dpt: '5.001', offset: 4 },
   { suffix: 'Status Värme', dpt: '5.001', offset: 5 },
   { suffix: 'Styr Kyla', dpt: '5.001', offset: 6 },
   { suffix: 'Status Kyla', dpt: '5.001', offset: 7 },
-  { suffix: 'Styr Fläkt', dpt: '5.001', offset: 8 },
-  { suffix: 'Status Fläkt', dpt: '5.001', offset: 9 },
+  { suffix: 'Res', dpt: '5.001', offset: 8 },
+  { suffix: 'Res', dpt: '5.001', offset: 9 },
+] as const;
+
+const MARKIS_GARDIN_SUFFIXES = [
+  { suffix: 'Upp/Ner', dpt: '1.008', offset: 0 },
+  { suffix: 'Steg/Stop', dpt: '1.007', offset: 1 },
 ] as const;
 
 const emptyFormValue: AddressFormValue = {
@@ -295,6 +317,43 @@ const AddAddressDialog = ({
     keepOpenAndPrepareNext(formatKnxAddress(main, middle, sub + 5));
   };
 
+  const handleAddTunableWhite = () => {
+    setSubmitted(true);
+    if (hasErrors) return;
+    const parsed = splitKnxAddress(value.address.trim());
+    if (!parsed) return;
+
+    const [main, middle, sub] = parsed;
+    if (sub > 246) return; // need 10 consecutive addresses
+    const baseName = value.name.trim();
+
+    for (const item of DIMMER_SUFFIXES) {
+      onSave(
+        {
+          ...payloadFromValue(),
+          address: formatKnxAddress(main, middle, sub + item.offset),
+          name: addSuffixToName(baseName, item.suffix),
+          dpt: item.dpt,
+        },
+        false
+      );
+    }
+
+    for (const item of TUNABLE_WHITE_EXTRA_SUFFIXES) {
+      onSave(
+        {
+          ...payloadFromValue(),
+          address: formatKnxAddress(main, middle, sub + item.offset),
+          name: addSuffixToName(baseName, item.suffix),
+          dpt: item.dpt,
+        },
+        false
+      );
+    }
+
+    keepOpenAndPrepareNext(formatKnxAddress(main, middle, sub + 10));
+  };
+
   const handleAddRtc = () => {
     setSubmitted(true);
     if (hasErrors) return;
@@ -319,7 +378,30 @@ const AddAddressDialog = ({
 
     keepOpenAndPrepareNext(formatKnxAddress(main, middle, sub + 10));
   };
+const handleAddMarkisGardin = () => {
+  setSubmitted(true);
+  if (hasErrors) return;
+  const parsed = splitKnxAddress(value.address.trim());
+  if (!parsed) return;
 
+  const [main, middle, sub] = parsed;
+  if (sub > 254) return; // need 2 consecutive addresses
+  const baseName = value.name.trim();
+
+  for (const item of MARKIS_GARDIN_SUFFIXES) {
+    onSave(
+      {
+        ...payloadFromValue(),
+        address: formatKnxAddress(main, middle, sub + item.offset),
+        name: addSuffixToName(baseName, item.suffix),
+        dpt: item.dpt,
+      },
+      false
+    );
+  }
+
+  keepOpenAndPrepareNext(formatKnxAddress(main, middle, sub + 2));
+};
   return (
     <Dialog
       open={open}
@@ -329,7 +411,7 @@ const AddAddressDialog = ({
       aria-labelledby="add-address-dialog-title"
       PaperProps={{
         sx: {
-          ml: { xs: 0, md: 100 },
+          ml: { xs: 0, md: 18 },
           WebkitAppRegion: 'no-drag',
           '& .MuiInputBase-root, & input, & textarea, & button, & [role="button"]': {
             WebkitAppRegion: 'no-drag',
@@ -481,8 +563,18 @@ const AddAddressDialog = ({
                 <Button variant="contained" color="secondary" onClick={handleAddDimmer}>
                   Add dimmer (5 group addresses)
                 </Button>
+                <Button
+                  variant="contained"
+                  color="secondary"
+                  onClick={handleAddTunableWhite}
+                >
+                  Add tunable white (10 group addresses)
+                </Button>
                 <Button variant="contained" color="secondary" onClick={handleAddRtc}>
                   Add RTC (10 group addresses)
+                </Button>
+                <Button variant="contained" color="secondary" onClick={handleAddMarkisGardin}>
+                  Add Markis/Gardin (2 group addresses)
                 </Button>
               </Box>
             </Grid>
@@ -491,7 +583,7 @@ const AddAddressDialog = ({
       </DialogContent>
 
       <DialogActions sx={{ px: 3, pb: 3, gap: 1, WebkitAppRegion: 'no-drag' }}>
-        <Button onClick={onClose}>Cancel</Button>
+        <Button onClick={onClose}>Close</Button>
         {!initialValue && (
           <Button onClick={handleAddAndNext} variant="outlined">
             Add & next

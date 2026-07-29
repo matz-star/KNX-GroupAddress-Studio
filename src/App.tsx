@@ -16,6 +16,8 @@ import {
   saveGroupAddresses,
   saveProjectName,
 } from './utils/storageHandler';
+import { downloadGroupAddressesEts5Xml } from './utils/ets5ExportHandler';
+import { importGroupAddressesFromEts5Xml } from './utils/ets5ImportHandler';
 
 type SnackbarState = {
   severity: 'success' | 'info' | 'warning' | 'error';
@@ -82,6 +84,15 @@ const App = () => {
     setEditingAddress(null);
   };
 
+  const handleExportEts5Xml = () => {
+    if (!addresses.length) {
+      openSnackbar('warning', 'Add at least one group address before exporting.');
+      return;
+    }
+    downloadGroupAddressesEts5Xml(addresses, projectName);
+    openSnackbar('success', 'Exported ETS5 XML.');
+  };
+
   const handleSaveAddress = (
     input: Omit<GroupAddress, 'id'>,
     closeAfterSave = true
@@ -135,8 +146,52 @@ const App = () => {
 
   const handleImportFile = async (file: File) => {
     try {
-      const { addresses: importedAddresses, errors } =
-        await parseGroupAddressesCsv(file);
+      const lowerName = file.name.toLowerCase();
+
+      // ETS5 XML import
+      if (lowerName.endsWith('.xml')) {
+        const { projectName: importedProjectName, addresses: importedAddresses } =
+          await importGroupAddressesFromEts5Xml(file);
+
+        let addedCount = 0;
+        let duplicateCount = 0;
+
+        setAddresses((current) => {
+          const existingByAddress = new Set(current.map((address) => address.address));
+          const next = [...current];
+
+          importedAddresses.forEach((address) => {
+            if (existingByAddress.has(address.address)) {
+              duplicateCount += 1;
+              return;
+            }
+
+            existingByAddress.add(address.address);
+            next.push({ ...address, id: createAddressId() });
+            addedCount += 1;
+          });
+
+          return next;
+        });
+
+        if (importedProjectName?.trim()) {
+          setProjectName(importedProjectName.trim());
+        }
+
+        if (!addedCount && duplicateCount) {
+          openSnackbar('warning', 'All imported ETS5 XML addresses were already present.');
+          return;
+        }
+
+        const messages: string[] = [];
+        messages.push(`Imported ${addedCount} group address(es) from ETS5 XML.`);
+        if (duplicateCount) messages.push(`Skipped ${duplicateCount} duplicate(s).`);
+        openSnackbar('success', messages.join(' '));
+        return;
+      }
+
+      // CSV import (existing behavior)
+      const { addresses: importedAddresses, errors } = await parseGroupAddressesCsv(file);
 
       if (!importedAddresses.length && errors.length) {
         openSnackbar('error', errors[0]);
@@ -177,7 +232,7 @@ const App = () => {
     } catch (error) {
       openSnackbar(
         'error',
-        error instanceof Error ? error.message : 'Failed to import CSV file.'
+        error instanceof Error ? error.message : 'Failed to import file.'
       );
     }
   };
@@ -224,9 +279,10 @@ const App = () => {
         onImportFile={handleImportFile}
         onExport3Col={handleExport3Col}
         onExportTree={handleExportTree}
+        onExportEts5Xml={handleExportEts5Xml}
       />
 
-      <Container maxWidth="lg" sx={{ py: 4 }}>
+      <Container maxWidth="lg" sx={{ py: 4, WebkitAppRegion: 'no-drag'  }}>
         <Stack spacing={3}>
           <ControlPanel
             selectedCount={selectedCount}
